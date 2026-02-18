@@ -629,6 +629,7 @@ const Fields = () => {
     });
 
     drawingManager.setMap(map);
+
     drawingManagerRef.current = drawingManager;
 
     // Add Auto Detect Location custom control
@@ -646,40 +647,164 @@ const Fields = () => {
     };
     map.controls[googleMaps.maps.ControlPosition.TOP_RIGHT].push(autoDetectButton);
 
-    googleMaps.maps.event.addListener(drawingManager, 'overlaycomplete', (event: any) => {
-      if (event.type !== 'polygon') {
-        return;
-      }
-
-      if (polygonRef.current) {
-        polygonRef.current.setMap(null);
-      }
-
-      polygonRef.current = event.overlay;
-      const path = event.overlay.getPath();
-      const points = path.getArray().map((point: any) => ({
-        lat: point.lat(),
-        lng: point.lng(),
-      }));
-
-      const areaSqm = googleMaps.maps.geometry.spherical.computeArea(path);
-      const areaKanal = areaSqm / KANAL_SQM;
-
-      setFormData((prev) => ({
-        ...prev,
-        boundaryPath: points,
-        mapAreaKanal: Number(areaKanal.toFixed(2)),
-      }));
-
-      // Add click listener to polygon for tree tagging
-      googleMaps.maps.event.addListener(event.overlay, 'click', (clickEvent: any) => {
-        const position = clickEvent?.latLng;
-        if (!position) return;
-        if (taggingModeRef.current) {
-          setPendingTagLocation({ lat: position.lat(), lng: position.lng() });
-          setTagFormOpen(true);
-        }
+    // --- New: Line drawing for tree tagging ---
+    // Add a dropdown for selecting row for line tagging
+    let lineRowSelect: HTMLSelectElement | null = null;
+    if (!document.getElementById('line-row-select')) {
+      lineRowSelect = document.createElement('select');
+      lineRowSelect.id = 'line-row-select';
+      lineRowSelect.className = 'bg-white border border-gray-300 rounded px-2 py-1 text-sm m-2.5';
+      lineRowSelect.style.minWidth = '120px';
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.text = 'Select Row';
+      lineRowSelect.appendChild(defaultOption);
+      (formData.rows || []).forEach((row) => {
+        const opt = document.createElement('option');
+        opt.value = row.rowId;
+        opt.text = `Row ${row.rowId}`;
+        lineRowSelect!.appendChild(opt);
       });
+      map.controls[googleMaps.maps.ControlPosition.TOP_RIGHT].push(lineRowSelect);
+    } else {
+      lineRowSelect = document.getElementById('line-row-select') as HTMLSelectElement;
+    }
+
+    // Add a button to enable line drawing
+    let lineDrawBtn: HTMLButtonElement | null = null;
+    if (!document.getElementById('draw-line-btn')) {
+      lineDrawBtn = document.createElement('button');
+      lineDrawBtn.id = 'draw-line-btn';
+      lineDrawBtn.textContent = 'Draw Tree Line';
+      lineDrawBtn.className = 'bg-white hover:bg-gray-50 text-green-700 text-sm font-medium px-4 py-2 rounded-lg shadow-md border border-green-300 cursor-pointer m-2.5';
+      lineDrawBtn.onclick = () => {
+        drawingManager.setDrawingMode('polyline');
+      };
+      map.controls[googleMaps.maps.ControlPosition.TOP_RIGHT].push(lineDrawBtn);
+    } else {
+      lineDrawBtn = document.getElementById('draw-line-btn') as HTMLButtonElement;
+    }
+
+    // Listen for overlaycomplete for both polygon and polyline
+    googleMaps.maps.event.addListener(drawingManager, 'overlaycomplete', (event: any) => {
+      if (event.type === 'polygon') {
+        if (polygonRef.current) {
+          polygonRef.current.setMap(null);
+        }
+        polygonRef.current = event.overlay;
+        const path = event.overlay.getPath();
+        const points: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+        const areaSqm = googleMaps.maps.geometry.spherical.computeArea(path);
+        const areaKanal = areaSqm / KANAL_SQM;
+        setFormData((prev) => ({
+          ...prev,
+          boundaryPath: points,
+          mapAreaKanal: Number(areaKanal.toFixed(2)),
+        }));
+        // Add click listener to polygon for tree tagging
+        googleMaps.maps.event.addListener(event.overlay, 'click', (clickEvent: any) => {
+          const position = clickEvent?.latLng;
+          if (!position) return;
+          if (taggingModeRef.current) {
+            setPendingTagLocation({ lat: position.lat(), lng: position.lng() });
+            setTagFormOpen(true);
+          }
+        });
+      }
+      // --- New: Handle polyline for tree tagging ---
+      if (event.type === 'polyline') {
+        const selectedRowId = lineRowSelect?.value;
+        if (!selectedRowId) {
+          alert('Please select a row before drawing the line.');
+          event.overlay.setMap(null);
+          return;
+        }
+        const row = (formData.rows || []).find((r) => r.rowId === selectedRowId);
+        if (!row) {
+          alert('Selected row not found.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Count total trees in the row
+        const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
+        if (nTrees === 0) {
+          alert('No trees specified for this row.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Get line points
+        const path = event.overlay.getPath();
+        const linePoints: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+        // Distribute trees evenly along the line
+        function interpolate(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }, t: number) {
+          return {
+            lat: p1.lat + (p2.lat - p1.lat) * t,
+            lng: p1.lng + (p2.lng - p1.lng) * t,
+          };
+        }
+        // Calculate total line length
+        let totalLength = 0;
+        for (let i = 1; i < linePoints.length; i++) {
+          const dx = linePoints[i].lat - linePoints[i - 1].lat;
+          const dy = linePoints[i].lng - linePoints[i - 1].lng;
+          totalLength += Math.sqrt(dx * dx + dy * dy);
+        }
+        // Place trees
+        let treeTags: any[] = [];
+        let treeIdx = 0;
+        let varietyIdx = 0;
+        let varietyTreeCount = parseInt(row.varieties[0]?.trees || '0') || 0;
+        for (let t = 0; t < nTrees; t++) {
+          const frac = nTrees === 1 ? 0.5 : t / (nTrees - 1);
+          // Find position along the polyline
+          let dist = frac * totalLength;
+          let acc = 0;
+          let segIdx = 0;
+          for (let i = 1; i < linePoints.length; i++) {
+            const dx = linePoints[i].lat - linePoints[i - 1].lat;
+            const dy = linePoints[i].lng - linePoints[i - 1].lng;
+            const segLen = Math.sqrt(dx * dx + dy * dy);
+            if (acc + segLen >= dist) {
+              segIdx = i - 1;
+              break;
+            }
+            acc += segLen;
+          }
+          const segStart = linePoints[segIdx];
+          const segEnd = linePoints[segIdx + 1] || segStart;
+          const segLen = Math.sqrt(
+            Math.pow(segEnd.lat - segStart.lat, 2) + Math.pow(segEnd.lng - segStart.lng, 2)
+          );
+          const segFrac = segLen ? (dist - acc) / segLen : 0;
+          const pt = interpolate(segStart, segEnd, segFrac);
+          // Assign variety
+          while (varietyIdx < row.varieties.length && treeIdx >= varietyTreeCount) {
+            varietyIdx++;
+            varietyTreeCount += parseInt(row.varieties[varietyIdx]?.trees || '0') || 0;
+          }
+          const variety = row.varieties[varietyIdx]?.variety || '';
+          treeTags.push({
+            id: `${Date.now()}-${Math.random()}`,
+            name: '',
+            variety,
+            rowNumber: row.rowId,
+            latitude: pt.lat,
+            longitude: pt.lng,
+          });
+          treeIdx++;
+        }
+        setFormData((prev) => ({
+          ...prev,
+          treeTags: [...prev.treeTags, ...treeTags],
+        }));
+        event.overlay.setMap(null); // Remove the line after tagging
+      }
     });
 
     if (kmlObjectUrlRef.current) {
@@ -1329,7 +1454,7 @@ const Fields = () => {
                           <span role="img" aria-label="apple">🍏</span> Orchard Summary
                         </h3>
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[250px] border-separate border-spacing-y-1">
+                          <table className="w-full min-w-62.5 border-separate border-spacing-y-1">
                             <thead>
                               <tr className="bg-green-100">
                                 <th className="px-3 py-2 text-left rounded-l-lg text-green-900">Variety</th>

@@ -620,15 +620,16 @@ const Fields = () => {
         drawingModes: ['polygon'],
       },
       polygonOptions: {
-        fillColor: '#22c55e',
-        fillOpacity: 0.2,
-        strokeColor: '#16a34a',
-        strokeWeight: 2,
+        fillColor: '#059669', // More saturated green
+        fillOpacity: 0.45,    // More visible
+        strokeColor: '#047857', // Darker green for border
+        strokeWeight: 3,
         editable: true,
       },
     });
 
     drawingManager.setMap(map);
+
     drawingManagerRef.current = drawingManager;
 
     // Add Auto Detect Location custom control
@@ -646,95 +647,362 @@ const Fields = () => {
     };
     map.controls[googleMaps.maps.ControlPosition.TOP_RIGHT].push(autoDetectButton);
 
-    googleMaps.maps.event.addListener(drawingManager, 'overlaycomplete', (event: any) => {
-      if (event.type !== 'polygon') {
-        return;
-      }
+    // --- New: Line drawing for tree tagging ---
 
-      if (polygonRef.current) {
-        polygonRef.current.setMap(null);
-      }
+    // --- Floating control panel for line tagging ---
+    let lineControlPanel: HTMLDivElement | null = document.getElementById('tree-line-panel') as HTMLDivElement;
+    if (!lineControlPanel) {
+      lineControlPanel = document.createElement('div');
+      lineControlPanel.id = 'tree-line-panel';
+      lineControlPanel.style.display = 'flex';
+      lineControlPanel.style.alignItems = 'center';
+      lineControlPanel.style.gap = '0.5rem';
+      lineControlPanel.style.background = 'rgba(255,255,255,0.97)';
+      lineControlPanel.style.border = '1px solid #d1fae5';
+      lineControlPanel.style.borderRadius = '0.5rem';
+      lineControlPanel.style.boxShadow = '0 2px 8px rgba(16,185,129,0.10)';
+      lineControlPanel.style.padding = '0.35rem 0.7rem';
+      lineControlPanel.style.margin = '0.7rem';
+      lineControlPanel.style.zIndex = '1000';
 
-      polygonRef.current = event.overlay;
-      const path = event.overlay.getPath();
-      const points: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
-        lat: point.lat(),
-        lng: point.lng(),
-      }));
-
-      const areaSqm = googleMaps.maps.geometry.spherical.computeArea(path);
-      const areaKanal = areaSqm / KANAL_SQM;
-
-      // --- Automatic tree tagging logic ---
-      function pointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]) {
-        // Ray-casting algorithm
-        let x = point.lng, y = point.lat;
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-          let xi = polygon[i].lng, yi = polygon[i].lat;
-          let xj = polygon[j].lng, yj = polygon[j].lat;
-          let intersect = ((yi > y) !== (yj > y)) &&
-            (x < (xj - xi) * (y - yi) / (yj - yi + 0.0000001) + xi);
-          if (intersect) inside = !inside;
+      // Row select
+      const lineRowSelect = document.createElement('select');
+      lineRowSelect.id = 'line-row-select';
+      lineRowSelect.className = 'border border-green-300 rounded px-1.5 py-1 text-[15px] focus:ring-2 focus:ring-green-500 focus:border-transparent';
+      lineRowSelect.style.minWidth = '100px';
+      lineRowSelect.style.height = '32px';
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.text = 'Select Row';
+      lineRowSelect.appendChild(defaultOption);
+      (formData.rows || []).forEach((row) => {
+        // Count total trees and already tagged for this row
+        const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
+        const alreadyTagged = (formData.treeTags || []).filter((t) => t.rowNumber === row.rowId).length;
+        const opt = document.createElement('option');
+        opt.value = row.rowId;
+        opt.text = `Row ${row.rowId}` + (alreadyTagged >= nTrees && nTrees > 0 ? ' (Tagged)' : '');
+        if (alreadyTagged >= nTrees && nTrees > 0) {
+          opt.disabled = true;
         }
-        return inside;
-      }
-
-      let autoTreeTags: any[] = [];
-      const rows = (formData.rows && formData.rows.length > 0) ? formData.rows : [];
-      if (rows.length > 0 && points.length > 2) {
-        // Get bounding box
-        let minLat = Math.min(...points.map((p) => p.lat));
-        let maxLat = Math.max(...points.map((p) => p.lat));
-        let minLng = Math.min(...points.map((p) => p.lng));
-        let maxLng = Math.max(...points.map((p) => p.lng));
-        // For each row, distribute trees evenly between minLng and maxLng, and rows between minLat and maxLat
-        for (let r = 0; r < rows.length; r++) {
-          const row = rows[r];
-          const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
-          // For each variety in the row
-          let treeIdx = 0;
-          for (let vIdx = 0; vIdx < row.varieties.length; vIdx++) {
-            const v = row.varieties[vIdx];
-            const n = parseInt(v.trees) || 0;
-            for (let t = 0; t < n; t++) {
-              // Evenly space along the row (lat axis)
-              const lat = minLat + (maxLat - minLat) * (r + 0.5) / rows.length;
-              // Evenly space along the row (lng axis)
-              const lng = minLng + (maxLng - minLng) * (treeIdx + 0.5) / nTrees;
-              const pt = { lat, lng };
-              if (pointInPolygon(pt, points)) {
-                autoTreeTags.push({
-                  id: `${Date.now()}-${Math.random()}`,
-                  name: '',
-                  variety: v.variety,
-                  rowNumber: row.rowId,
-                  latitude: lat,
-                  longitude: lng,
-                });
-              }
-              treeIdx++;
-            }
-          }
-        }
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        boundaryPath: points,
-        mapAreaKanal: Number(areaKanal.toFixed(2)),
-        treeTags: autoTreeTags.length > 0 ? autoTreeTags : prev.treeTags,
-      }));
-
-      // Add click listener to polygon for tree tagging
-      googleMaps.maps.event.addListener(event.overlay, 'click', (clickEvent: any) => {
-        const position = clickEvent?.latLng;
-        if (!position) return;
-        if (taggingModeRef.current) {
-          setPendingTagLocation({ lat: position.lat(), lng: position.lng() });
-          setTagFormOpen(true);
-        }
+        lineRowSelect.appendChild(opt);
       });
+
+      // Draw line button
+      const lineDrawBtn = document.createElement('button');
+      lineDrawBtn.id = 'draw-line-btn';
+      lineDrawBtn.innerHTML = '<svg style="display:inline;vertical-align:middle;margin-right:0.4em;" width="18" height="18" fill="none" stroke="#059669" stroke-width="2" viewBox="0 0 24 24"><path d="M4 20L20 4M4 4h16v16"/></svg>Draw Tree Line';
+      lineDrawBtn.className = 'bg-green-600 hover:bg-green-700 text-white text-[15px] font-semibold px-3 py-1.5 rounded-md shadow border border-green-700 transition-colors duration-150';
+      lineDrawBtn.style.display = 'flex';
+      lineDrawBtn.style.alignItems = 'center';
+      lineDrawBtn.style.gap = '0.4em';
+      lineDrawBtn.style.height = '34px';
+      lineDrawBtn.onclick = () => {
+        drawingManager.setDrawingMode('polyline');
+      };
+
+      lineControlPanel.appendChild(lineRowSelect);
+      lineControlPanel.appendChild(lineDrawBtn);
+      map.controls[googleMaps.maps.ControlPosition.TOP_RIGHT].push(lineControlPanel);
+    } else {
+      // Update row options if needed
+      const lineRowSelect = lineControlPanel.querySelector('#line-row-select') as HTMLSelectElement;
+      if (lineRowSelect) {
+        // Remove all except first
+        while (lineRowSelect.options.length > 1) lineRowSelect.remove(1);
+        (formData.rows || []).forEach((row) => {
+          const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
+          const alreadyTagged = (formData.treeTags || []).filter((t) => t.rowNumber === row.rowId).length;
+          const opt = document.createElement('option');
+          opt.value = row.rowId;
+          opt.text = `Row ${row.rowId}` + (alreadyTagged >= nTrees && nTrees > 0 ? ' (Tagged)' : '');
+          if (alreadyTagged >= nTrees && nTrees > 0) {
+            opt.disabled = true;
+          }
+          lineRowSelect.appendChild(opt);
+        });
+      }
+    }
+
+    // Listen for overlaycomplete for both polygon and polyline
+    googleMaps.maps.event.addListener(drawingManager, 'overlaycomplete', (event: any) => {
+      if (event.type === 'polygon') {
+        if (polygonRef.current) {
+          polygonRef.current.setMap(null);
+        }
+        polygonRef.current = event.overlay;
+        const path = event.overlay.getPath();
+        const points: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+        const areaSqm = googleMaps.maps.geometry.spherical.computeArea(path);
+        const areaKanal = areaSqm / KANAL_SQM;
+        setFormData((prev) => ({
+          ...prev,
+          boundaryPath: points,
+          mapAreaKanal: Number(areaKanal.toFixed(2)),
+        }));
+        // Add click listener to polygon for tree tagging
+        googleMaps.maps.event.addListener(event.overlay, 'click', (clickEvent: any) => {
+          const position = clickEvent?.latLng;
+          if (!position) return;
+          if (taggingModeRef.current) {
+            setPendingTagLocation({ lat: position.lat(), lng: position.lng() });
+            setTagFormOpen(true);
+          }
+        });
+      }
+      // --- Handle polyline for tree tagging ---
+      if (event.type === 'polyline') {
+        const lineRowSelect = document.getElementById('line-row-select') as HTMLSelectElement;
+        const selectedRowId = lineRowSelect?.value;
+        if (!selectedRowId) {
+          alert('Please select a row before drawing the line.');
+          event.overlay.setMap(null);
+          return;
+        }
+        const row = (formData.rows || []).find((r) => r.rowId === selectedRowId);
+        if (!row) {
+          alert('Selected row not found.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Count total trees in the row
+        const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
+        // Count already tagged trees for this row
+        const alreadyTagged = (formData.treeTags || []).filter((t) => t.rowNumber === row.rowId).length;
+        if (nTrees === 0) {
+          alert('No trees specified for this row.');
+          event.overlay.setMap(null);
+          return;
+        }
+        if (alreadyTagged >= nTrees) {
+          alert('All trees for this row are already tagged.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Get line points
+        const path = event.overlay.getPath();
+        const linePoints: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+
+        // --- Prevent drawing outside boundary ---
+        // Use ray-casting algorithm for point-in-polygon
+        function pointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]) {
+          let x = point.lng, y = point.lat;
+          let inside = false;
+          for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            let xi = polygon[i].lng, yi = polygon[i].lat;
+            let xj = polygon[j].lng, yj = polygon[j].lat;
+            let intersect = ((yi > y) !== (yj > y)) &&
+              (x < (xj - xi) * (y - yi) / (yj - yi + 0.0000001) + xi);
+            if (intersect) inside = !inside;
+          }
+          return inside;
+        }
+        if (!formData.boundaryPath || formData.boundaryPath.length < 3) {
+          alert('Please draw the boundary first.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Check all line points are inside the boundary
+        const allInside = linePoints.every(pt => pointInPolygon(pt, formData.boundaryPath));
+        if (!allInside) {
+          alert('Tree line must be fully inside the boundary.');
+          event.overlay.setMap(null);
+          return;
+        }
+
+        // Distribute trees evenly along the line, but do not exceed nTrees - alreadyTagged
+        function interpolate(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }, t: number) {
+          return {
+            lat: p1.lat + (p2.lat - p1.lat) * t,
+            lng: p1.lng + (p2.lng - p1.lng) * t,
+          };
+        }
+        // Calculate total line length
+        let totalLength = 0;
+        for (let i = 1; i < linePoints.length; i++) {
+          const dx = linePoints[i].lat - linePoints[i - 1].lat;
+          const dy = linePoints[i].lng - linePoints[i - 1].lng;
+          totalLength += Math.sqrt(dx * dx + dy * dy);
+        }
+        // Place trees
+        let treeTags: any[] = [];
+        let treeIdx = 0;
+        let varietyIdx = 0;
+        let varietyTreeCount = parseInt(row.varieties[0]?.trees || '0') || 0;
+        const treesToAdd = Math.max(0, nTrees - alreadyTagged);
+        for (let t = 0; t < treesToAdd; t++) {
+          const frac = treesToAdd === 1 ? 0.5 : t / (treesToAdd - 1);
+          // Find position along the polyline
+          let dist = frac * totalLength;
+          let acc = 0;
+          let segIdx = 0;
+          for (let i = 1; i < linePoints.length; i++) {
+            const dx = linePoints[i].lat - linePoints[i - 1].lat;
+            const dy = linePoints[i].lng - linePoints[i - 1].lng;
+            const segLen = Math.sqrt(dx * dx + dy * dy);
+            if (acc + segLen >= dist) {
+              segIdx = i - 1;
+              break;
+            }
+            acc += segLen;
+          }
+          const segStart = linePoints[segIdx];
+          const segEnd = linePoints[segIdx + 1] || segStart;
+          const segLen = Math.sqrt(
+            Math.pow(segEnd.lat - segStart.lat, 2) + Math.pow(segEnd.lng - segStart.lng, 2)
+          );
+          const segFrac = segLen ? (dist - acc) / segLen : 0;
+          const pt = interpolate(segStart, segEnd, segFrac);
+          // Assign variety
+          while (varietyIdx < row.varieties.length && treeIdx >= varietyTreeCount) {
+            varietyIdx++;
+            varietyTreeCount += parseInt(row.varieties[varietyIdx]?.trees || '0') || 0;
+          }
+          const variety = row.varieties[varietyIdx]?.variety || '';
+          treeTags.push({
+            id: `${Date.now()}-${Math.random()}`,
+            name: '',
+            variety,
+            rowNumber: row.rowId,
+            latitude: pt.lat,
+            longitude: pt.lng,
+          });
+          treeIdx++;
+        }
+        setFormData((prev) => ({
+          ...prev,
+          treeTags: [...prev.treeTags, ...treeTags],
+        }));
+        event.overlay.setMap(null); // Remove the line after tagging
+      }
+    });
+
+    // Listen for overlaycomplete for both polygon and polyline
+    googleMaps.maps.event.addListener(drawingManager, 'overlaycomplete', (event: any) => {
+      if (event.type === 'polygon') {
+        if (polygonRef.current) {
+          polygonRef.current.setMap(null);
+        }
+        polygonRef.current = event.overlay;
+        const path = event.overlay.getPath();
+        const points: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+        const areaSqm = googleMaps.maps.geometry.spherical.computeArea(path);
+        const areaKanal = areaSqm / KANAL_SQM;
+        setFormData((prev) => ({
+          ...prev,
+          boundaryPath: points,
+          mapAreaKanal: Number(areaKanal.toFixed(2)),
+        }));
+        // Add click listener to polygon for tree tagging
+        googleMaps.maps.event.addListener(event.overlay, 'click', (clickEvent: any) => {
+          const position = clickEvent?.latLng;
+          if (!position) return;
+          if (taggingModeRef.current) {
+            setPendingTagLocation({ lat: position.lat(), lng: position.lng() });
+            setTagFormOpen(true);
+          }
+        });
+      }
+      // --- New: Handle polyline for tree tagging ---
+      if (event.type === 'polyline') {
+        const selectedRowId = lineRowSelect?.value;
+        if (!selectedRowId) {
+          alert('Please select a row before drawing the line.');
+          event.overlay.setMap(null);
+          return;
+        }
+        const row = (formData.rows || []).find((r) => r.rowId === selectedRowId);
+        if (!row) {
+          alert('Selected row not found.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Count total trees in the row
+        const nTrees = row.varieties.reduce((sum, v) => sum + (parseInt(v.trees) || 0), 0);
+        if (nTrees === 0) {
+          alert('No trees specified for this row.');
+          event.overlay.setMap(null);
+          return;
+        }
+        // Get line points
+        const path = event.overlay.getPath();
+        const linePoints: { lat: number; lng: number }[] = path.getArray().map((point: any) => ({
+          lat: point.lat(),
+          lng: point.lng(),
+        }));
+        // Distribute trees evenly along the line
+        function interpolate(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }, t: number) {
+          return {
+            lat: p1.lat + (p2.lat - p1.lat) * t,
+            lng: p1.lng + (p2.lng - p1.lng) * t,
+          };
+        }
+        // Calculate total line length
+        let totalLength = 0;
+        for (let i = 1; i < linePoints.length; i++) {
+          const dx = linePoints[i].lat - linePoints[i - 1].lat;
+          const dy = linePoints[i].lng - linePoints[i - 1].lng;
+          totalLength += Math.sqrt(dx * dx + dy * dy);
+        }
+        // Place trees
+        let treeTags: any[] = [];
+        let treeIdx = 0;
+        let varietyIdx = 0;
+        let varietyTreeCount = parseInt(row.varieties[0]?.trees || '0') || 0;
+        for (let t = 0; t < nTrees; t++) {
+          const frac = nTrees === 1 ? 0.5 : t / (nTrees - 1);
+          // Find position along the polyline
+          let dist = frac * totalLength;
+          let acc = 0;
+          let segIdx = 0;
+          for (let i = 1; i < linePoints.length; i++) {
+            const dx = linePoints[i].lat - linePoints[i - 1].lat;
+            const dy = linePoints[i].lng - linePoints[i - 1].lng;
+            const segLen = Math.sqrt(dx * dx + dy * dy);
+            if (acc + segLen >= dist) {
+              segIdx = i - 1;
+              break;
+            }
+            acc += segLen;
+          }
+          const segStart = linePoints[segIdx];
+          const segEnd = linePoints[segIdx + 1] || segStart;
+          const segLen = Math.sqrt(
+            Math.pow(segEnd.lat - segStart.lat, 2) + Math.pow(segEnd.lng - segStart.lng, 2)
+          );
+          const segFrac = segLen ? (dist - acc) / segLen : 0;
+          const pt = interpolate(segStart, segEnd, segFrac);
+          // Assign variety
+          while (varietyIdx < row.varieties.length && treeIdx >= varietyTreeCount) {
+            varietyIdx++;
+            varietyTreeCount += parseInt(row.varieties[varietyIdx]?.trees || '0') || 0;
+          }
+          const variety = row.varieties[varietyIdx]?.variety || '';
+          treeTags.push({
+            id: `${Date.now()}-${Math.random()}`,
+            name: '',
+            variety,
+            rowNumber: row.rowId,
+            latitude: pt.lat,
+            longitude: pt.lng,
+          });
+          treeIdx++;
+        }
+        setFormData((prev) => ({
+          ...prev,
+          treeTags: [...prev.treeTags, ...treeTags],
+        }));
+        event.overlay.setMap(null); // Remove the line after tagging
+      }
     });
 
     if (kmlObjectUrlRef.current) {
@@ -778,6 +1046,24 @@ const Fields = () => {
       return;
     }
 
+    // --- Always show boundary polygon if boundaryPath exists ---
+    if (polygonRef.current) {
+      polygonRef.current.setMap(null);
+      polygonRef.current = null;
+    }
+    if (formData.boundaryPath && formData.boundaryPath.length > 2) {
+      polygonRef.current = new googleMaps.maps.Polygon({
+        paths: formData.boundaryPath,
+        fillColor: '#059669',
+        fillOpacity: 0.45,
+        strokeColor: '#047857',
+        strokeWeight: 3,
+        editable: false,
+        map: mapInstanceRef.current,
+      });
+    }
+
+    // --- Tree markers logic (unchanged) ---
     treeMarkersRef.current.forEach((marker) => marker.setMap(null));
     let infoWindow: any = null;
     treeMarkersRef.current = formData.treeTags.map((tag) => {
@@ -820,7 +1106,7 @@ const Fields = () => {
 
       return marker;
     });
-  }, [formData.treeTags, selectedTreeId]);
+  }, [formData.boundaryPath, formData.treeTags, selectedTreeId, mapsLoaded, wizardOpen, wizardStep]);
 
   const resetWizard = () => {
     setWizardOpen(false);
