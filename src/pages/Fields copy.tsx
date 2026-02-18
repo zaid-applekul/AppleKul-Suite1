@@ -788,34 +788,6 @@ const Fields = () => {
           lat: point.lat(),
           lng: point.lng(),
         }));
-
-        // --- Prevent drawing outside boundary ---
-        // Use ray-casting algorithm for point-in-polygon
-        function pointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]) {
-          let x = point.lng, y = point.lat;
-          let inside = false;
-          for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-            let xi = polygon[i].lng, yi = polygon[i].lat;
-            let xj = polygon[j].lng, yj = polygon[j].lat;
-            let intersect = ((yi > y) !== (yj > y)) &&
-              (x < (xj - xi) * (y - yi) / (yj - yi + 0.0000001) + xi);
-            if (intersect) inside = !inside;
-          }
-          return inside;
-        }
-        if (!formData.boundaryPath || formData.boundaryPath.length < 3) {
-          alert('Please draw the boundary first.');
-          event.overlay.setMap(null);
-          return;
-        }
-        // Check all line points are inside the boundary
-        const allInside = linePoints.every(pt => pointInPolygon(pt, formData.boundaryPath));
-        if (!allInside) {
-          alert('Tree line must be fully inside the boundary.');
-          event.overlay.setMap(null);
-          return;
-        }
-
         // Distribute trees evenly along the line, but do not exceed nTrees - alreadyTagged
         function interpolate(p1: { lat: number; lng: number }, p2: { lat: number; lng: number }, t: number) {
           return {
