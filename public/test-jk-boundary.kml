@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Jammu and Kashmir Test Boundary</name>
+    <Placemark>
+      <name>JK Test Polygon</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              74.7973,34.0837,0
+              75.0000,34.0837,0
+              75.0000,33.8000,0
+              74.7973,33.8000,0
+              74.7973,34.0837,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>
