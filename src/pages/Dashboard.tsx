@@ -22,6 +22,69 @@ const Dashboard: React.FC = () => {
   const [fieldsError, setFieldsError] = useState<string | null>(null);
   const [activities, setActivities] = useState<Array<{ id: string; title: string; createdAt: string; kind: 'success' | 'warning' | 'info' }>>([]);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [weather, setWeather] = useState<any>(null);
+  const [forecast, setForecast] = useState<any[]>([]);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+    // Get user's current location and fetch weather from Open-Meteo
+    useEffect(() => {
+      setWeatherError(null);
+      setWeatherLoading(true);
+      if (!navigator.geolocation) {
+        setWeatherError('Geolocation not supported');
+        setWeatherLoading(false);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          try {
+            // Fetch current weather and 7-day forecast from Open-Meteo, including all available daily fields
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours,rain_sum,showers_sum,snowfall_sum,precipitation_probability_max,uv_index_max,weathercode&forecast_days=7&timezone=auto`;
+            try {
+              const res = await fetch(url);
+              const data = await res.json();
+              setWeather(data.current_weather);
+              // Debug: log the daily data
+              if (!data.daily) {
+                console.error('Open-Meteo: No daily data returned', data);
+              }
+              // Prepare forecast array for next 3 days, include all available daily fields
+              if (data.daily) {
+                const days = data.daily.time.map((date: string, i: number) => ({
+                  date,
+                  tempMax: data.daily.temperature_2m_max?.[i],
+                  tempMin: data.daily.temperature_2m_min?.[i],
+                  precipitation: data.daily.precipitation_sum?.[i],
+                  precipitationHours: data.daily.precipitation_hours?.[i],
+                  rain: data.daily.rain_sum?.[i],
+                  showers: data.daily.showers_sum?.[i],
+                  snowfall: data.daily.snowfall_sum?.[i],
+                  precipitationProb: data.daily.precipitation_probability_max?.[i],
+                  uvIndex: data.daily.uv_index_max?.[i],
+                  weathercode: data.daily.weathercode?.[i],
+                }));
+                setForecast(days);
+              } else {
+                setForecast([]);
+              }
+            } catch (err) {
+              setWeatherError('Failed to fetch weather');
+              console.error('Open-Meteo fetch error:', err);
+            }
+          } catch (e) {
+            setWeatherError('Failed to fetch weather');
+          } finally {
+            setWeatherLoading(false);
+          }
+        },
+        () => {
+          setWeatherError('Unable to get location');
+          setWeatherLoading(false);
+        }
+      );
+    }, []);
   const { user, session } = useAuth();
 
   const profileUser: User = user ?? {
@@ -466,6 +529,9 @@ const Dashboard: React.FC = () => {
     setSelectedFieldId(tag.fieldId);
   };
 
+  // Calculate total trees from all treeTags
+  const totalTrees = treeTags.length;
+
   const stats = [
     {
       title: 'Total Fields',
@@ -475,8 +541,8 @@ const Dashboard: React.FC = () => {
       bgColor: 'bg-blue-50',
     },
     {
-      title: 'Healthy Trees',
-      value: '0',
+      title: 'Total Trees',
+      value: totalTrees,
       icon: TreePine,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
@@ -490,7 +556,7 @@ const Dashboard: React.FC = () => {
     },
     {
       title: 'Weather',
-      value: 'N/A',
+      value: weatherLoading ? 'Loading...' : (weather ? `${weather.temperature}°C` : (weatherError || 'N/A')),
       icon: Cloud,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
@@ -530,7 +596,6 @@ const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Orchard Map Overview - Card */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -553,11 +618,11 @@ const Dashboard: React.FC = () => {
           {/* Map Section - Larger */}
           <div className="relative">
             {loadingFields ? (
-              <div className="w-full h-[520px] rounded-2xl border border-gray-200 bg-gray-50 flex items-center justify-center">
+              <div className="w-full h-130 rounded-2xl border border-gray-200 bg-gray-50 flex items-center justify-center">
                 <p className="text-sm text-gray-500">Loading fields...</p>
               </div>
             ) : fields.length === 0 ? (
-              <div className="w-full h-[520px] rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
+              <div className="w-full h-130 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center">
                 <div className="text-center">
                   <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-700 mb-2">No Orchards Mapped Yet</h3>
@@ -572,7 +637,7 @@ const Dashboard: React.FC = () => {
               <>
                 <div
                   ref={mapRef}
-                  className="w-full h-[700px] rounded-2xl border-2 border-green-400 bg-gray-100 shadow-lg"
+                  className="w-full h-175 rounded-2xl border-2 border-green-400 bg-gray-100 shadow-lg"
                 />
                 {!import.meta.env.VITE_GOOGLE_API_KEY && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-2xl">
@@ -604,13 +669,12 @@ const Dashboard: React.FC = () => {
                 <div className="flex gap-2 overflow-x-auto pb-2 w-full justify-center">
                   {fields.map((field) => {
                     // Try to get details JSON if present
-                    const details = (field as any).details || {};
                     const orchardType = field.details && 'orchardType' in field.details ? field.details.orchardType : '—';
                     const varietyTrees = field.details && Array.isArray(field.details.varietyTrees) ? field.details.varietyTrees : [];
                     return (
                       <div
                         key={field.id}
-                        className={`min-w-[220px] p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                        className={`min-w-55 p-3 rounded-lg border-2 transition-all cursor-pointer ${
                           selectedFieldId === field.id
                             ? 'border-green-500 bg-green-50'
                             : 'border-gray-200 hover:border-green-300 bg-white'
@@ -674,7 +738,7 @@ const Dashboard: React.FC = () => {
                   ).map((tag) => (
                     <div
                       key={tag.id}
-                      className="min-w-[180px] p-2 rounded-lg border border-gray-200 hover:border-green-300 bg-white cursor-pointer"
+                      className="min-w-45 p-2 rounded-lg border border-gray-200 hover:border-green-300 bg-white cursor-pointer"
                       onClick={() => handleViewTree(tag)}
                     >
                       <div className="flex items-center gap-2">
@@ -692,6 +756,57 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
             )}
+            {/* Weather Forecast Section - moved below map and tagged trees */}
+            <div className="mt-8">
+              <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-blue-500" /> Weather Forecast
+              </h2>
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
+                {weatherLoading ? (
+                  <p className="text-sm text-gray-500">Loading weather...</p>
+                ) : weatherError ? (
+                  <p className="text-sm text-red-600">{weatherError}</p>
+                ) : weather ? (
+                  <div className="flex flex-col md:flex-row gap-6 items-center justify-center">
+                    <div className="flex flex-col items-center p-4 bg-blue-100 rounded-lg min-w-30">
+                      <span className="text-4xl font-bold text-blue-700">{weather.temperature}°C</span>
+                      <span className="text-sm text-blue-600">Current Temperature</span>
+                    </div>
+                    {forecast.length > 0 && (
+                      <div className="flex flex-row gap-4">
+                        {forecast.map((day, i) => (
+                          <div key={i} className="flex flex-col items-center p-3 bg-green-50 rounded-lg min-w-27.5 border border-green-100">
+                            <span className="font-semibold text-green-700">{new Date(day.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                            <span className="text-lg font-bold text-green-900">{day.tempMax}° / {day.tempMin}°C</span>
+                            {typeof day.precipitation === 'number' && day.precipitation > 0 && (
+                              <span className="text-xs text-green-700">Precipitation: {day.precipitation} mm</span>
+                            )}
+                            {typeof day.rain === 'number' && day.rain > 0 && (
+                              <span className="text-xs text-blue-700">Rain: {day.rain} mm</span>
+                            )}
+                            {typeof day.showers === 'number' && day.showers > 0 && (
+                              <span className="text-xs text-blue-700">Showers: {day.showers} mm</span>
+                            )}
+                            {typeof day.snowfall === 'number' && day.snowfall > 0 && (
+                              <span className="text-xs text-blue-400">Snowfall: {day.snowfall} mm</span>
+                            )}
+                            {typeof day.precipitationHours === 'number' && day.precipitationHours > 0 && (
+                              <span className="text-xs text-blue-500">Precip Hours: {day.precipitationHours} h</span>
+                            )}
+                            {typeof day.precipitationProb === 'number' && day.precipitationProb > 0 && (
+                              <span className="text-xs text-purple-700">Precip Prob: {day.precipitationProb}%</span>
+                            )}
+                            {typeof day.uvIndex === 'number' && (
+                              <span className="text-xs text-yellow-600">UV Index: {day.uvIndex}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
       </Card>
