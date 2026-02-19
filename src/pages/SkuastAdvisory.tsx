@@ -109,8 +109,7 @@ const SkuastAdvisory: React.FC = () => {
               </div>
             </section>
           </div>
-          {/* Book spine effect */}
-          <div className="hidden md:block absolute top-[120px] bottom-0 left-1/2 w-2 bg-gradient-to-b from-green-200/60 to-green-100/0 z-10 rounded-full shadow-inner" style={{transform: 'translateX(-50%)'}} />
+          {/* Book spine effect removed */}
         </div>
       </div>
     </div>
