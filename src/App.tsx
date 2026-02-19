@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Fields from './pages/Fields';
 import Profile from './pages/Profile';
 import SkuastAdvisory from './pages/SkuastAdvisory';
+import SoilTestAdvisory from './pages/SoilTestAdvisory';
 import { useAuth } from './contexts/AuthContext';
 
 const RequireAuth = ({ children }: { children: ReactNode }) => {
@@ -46,6 +47,7 @@ function App() {
           <Route path="fields" element={<Fields />} />
           <Route path="profile" element={<Profile />} />
           <Route path="skuast-advisory" element={<SkuastAdvisory />} />
+          <Route path="soil-test-advisory" element={<SoilTestAdvisory />} />
         </Route>
       </Routes>
     </Router>
