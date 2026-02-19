@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Menu, Edit, LogOut, ChevronDown } from 'lucide-react';
+import { User, Menu, Edit, LogOut, ChevronDown, Hospital, BarChart2, GraduationCap, Mail, Network } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -88,6 +88,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, user }) => {
                 </div>
               </div>
               
+
               <button
                 onClick={handleEditProfile}
                 className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
@@ -95,8 +96,45 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, user }) => {
                 <Edit className="w-4 h-4 mr-3 text-gray-500" />
                 Edit Profile
               </button>
-              
-              
+
+              {/* External Links */}
+
+              <a href="https://www.applekul.com/hospital" target="_blank" rel="noopener noreferrer"
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{ textAlign: 'left' }}
+              >
+                <Hospital className="w-4 h-4 mr-3 text-gray-500" />
+                Hospital
+              </a>
+              <a href="https://www.applekul.com/marketinsights" target="_blank" rel="noopener noreferrer"
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{ textAlign: 'left' }}
+              >
+                <BarChart2 className="w-4 h-4 mr-3 text-gray-500" />
+                Market Insights
+              </a>
+              <a href="https://www.applekul.com/university" target="_blank" rel="noopener noreferrer"
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{ textAlign: 'left' }}
+              >
+                <GraduationCap className="w-4 h-4 mr-3 text-gray-500" />
+                University
+              </a>
+              <a href="https://www.applekul.com/contact" target="_blank" rel="noopener noreferrer"
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{ textAlign: 'left' }}
+              >
+                <Mail className="w-4 h-4 mr-3 text-gray-500" />
+                Contact
+              </a>
+              <a href="https://www.applekul.com/kulnet" target="_blank" rel="noopener noreferrer"
+                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                style={{ textAlign: 'left' }}
+              >
+                <Network className="w-4 h-4 mr-3 text-gray-500" />
+                KulNet
+              </a>
+
               <div className="border-t border-gray-200 my-1"></div>
               
               <button

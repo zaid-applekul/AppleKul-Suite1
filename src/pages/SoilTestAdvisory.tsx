@@ -124,24 +124,52 @@ const SoilTestAdvisory: React.FC = () => {
     }
   };
 
-  // Nutrient deficiency logic (simple RAG based on example thresholds)
+  // Nutrient status logic with 15% threshold and advisory fetch
+  const deficiencyAdvisory: Record<string, string> = {
+    'soil_ph': 'Apply lime to raise pH or sulfur to lower pH as per recommendation.',
+    'N': 'Apply recommended dose of nitrogen fertilizer.',
+    'P': 'Apply phosphorus fertilizer as per soil test.',
+    'K': 'Apply potassium fertilizer as per soil test.',
+    // ...add more as needed
+  };
+  const toxicityAdvisory: Record<string, string> = {
+    'soil_ph': 'Reduce lime application or use acidifying amendments.',
+    'N': 'Reduce nitrogen application, avoid over-fertilization.',
+    'P': 'Reduce phosphorus application, avoid over-fertilization.',
+    'K': 'Reduce potassium application, avoid over-fertilization.',
+    // ...add more as needed
+  };
   const getDeficiencyAlerts = (analytics: any[]) => {
-    // Example: check for N, P, K, pH, EC, etc. (real logic should use actual parameter names and thresholds)
+    // Define optimal ranges for each parameter
     const params = [
-      { key: 'soil_ph', label: 'Soil pH', green: [6, 7.5], amber: [5.5, 8] },
-      { key: 'N', label: 'Nitrogen (N)', green: [280, 450], amber: [200, 500] },
-      { key: 'P', label: 'Phosphorus (P)', green: [20, 40], amber: [15, 50] },
-      { key: 'K', label: 'Potassium (K)', green: [120, 250], amber: [100, 300] },
+      { key: 'soil_ph', label: 'Soil pH', green: [6, 7.5] },
+      { key: 'N', label: 'Nitrogen (N)', green: [280, 450] },
+      { key: 'P', label: 'Phosphorus (P)', green: [20, 40] },
+      { key: 'K', label: 'Potassium (K)', green: [120, 250] },
       // ...add more as needed
     ];
     const alerts = [];
     for (const param of params) {
       const val = analytics.find(a => a.metric_type === param.key)?.metric_value;
       if (val === undefined || val === null) continue;
-      let status: 'green' | 'amber' | 'red' = 'red';
-      if (val >= param.green[0] && val <= param.green[1]) status = 'green';
-      else if (val >= param.amber[0] && val <= param.amber[1]) status = 'amber';
-      alerts.push({ ...param, value: val, status });
+      const [optMin, optMax] = param.green;
+      const range = optMax - optMin;
+      const margin = range * 0.15;
+      let status: 'green' | 'amber' | 'red' = 'green';
+      let advisory = '';
+      if (val >= optMin && val <= optMax) {
+        status = 'green';
+      } else if (
+        (val >= optMin - margin && val < optMin) ||
+        (val > optMax && val <= optMax + margin)
+      ) {
+        status = 'amber';
+        advisory = val < optMin ? deficiencyAdvisory[param.key] || '' : toxicityAdvisory[param.key] || '';
+      } else {
+        status = 'red';
+        advisory = val < optMin ? deficiencyAdvisory[param.key] || '' : toxicityAdvisory[param.key] || '';
+      }
+      alerts.push({ ...param, value: val, status, advisory });
     }
     return alerts;
   };
@@ -351,7 +379,7 @@ const SoilTestAdvisory: React.FC = () => {
                   <span className="font-extrabold text-xl text-green-900 tracking-tight">Latest Nutrient Status</span>
                 </div>
                 {topSummary.field && (
-                  <div className="text-green-800 text-sm mb-1">Field: <span className="font-semibold">{topSummary.field}</span>{topSummary.date && ` | Test Date: ${new Date(topSummary.date).toLocaleDateString()}`}</div>
+                  <div className="text-black text-sm mb-1">Field: <span className="font-bold">{topSummary.field}</span>{topSummary.date && ` | Test Date: ${new Date(topSummary.date).toLocaleDateString()}`}</div>
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -362,14 +390,37 @@ const SoilTestAdvisory: React.FC = () => {
                     <span className="font-semibold text-red-700 text-base">Lacking</span>
                   </div>
                   {topSummary.lacking.length > 0 ? (
-                    <ul className="list-disc ml-5 space-y-1">
-                      {topSummary.lacking.map((item, idx) => (
-                        <li key={idx} className="flex items-center text-red-800 text-sm font-medium">
-                          <svg className="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728" /></svg>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border border-red-200 rounded">
+                        <thead>
+                          <tr className="bg-red-100">
+                            <th className="p-2 text-left">Nutrient</th>
+                            <th className="p-2 text-left">Value</th>
+                            <th className="p-2 text-left">Unit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topSummary.lacking.map((item, idx) => {
+                            // Parse: "Nutrient (value unit)" or "Nutrient (value)"
+                            const match = item.match(/^([^(]+)\s*\(([^)]+)\)$/);
+                            let nutrient = item, value = '', unit = '';
+                            if (match) {
+                              nutrient = match[1].trim();
+                              const valParts = match[2].split(' ');
+                              value = valParts[0];
+                              unit = valParts.slice(1).join(' ');
+                            }
+                            return (
+                              <tr key={idx} className="border-t border-red-100">
+                                <td className="p-2 font-semibold text-red-800">{nutrient}</td>
+                                <td className="p-2 text-red-700">{value}</td>
+                                <td className="p-2 text-red-700">{unit}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <span className="text-green-700 text-sm italic">No deficiencies detected</span>
                   )}
@@ -381,14 +432,37 @@ const SoilTestAdvisory: React.FC = () => {
                     <span className="font-semibold text-yellow-700 text-base">Excess</span>
                   </div>
                   {topSummary.excess.length > 0 ? (
-                    <ul className="list-disc ml-5 space-y-1">
-                      {topSummary.excess.map((item, idx) => (
-                        <li key={idx} className="flex items-center text-yellow-800 text-sm font-medium">
-                          <svg className="w-4 h-4 mr-2 text-yellow-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border border-yellow-200 rounded">
+                        <thead>
+                          <tr className="bg-yellow-100">
+                            <th className="p-2 text-left">Nutrient</th>
+                            <th className="p-2 text-left">Value</th>
+                            <th className="p-2 text-left">Unit</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topSummary.excess.map((item, idx) => {
+                            // Parse: "Nutrient (value unit)" or "Nutrient (value)"
+                            const match = item.match(/^([^(]+)\s*\(([^)]+)\)$/);
+                            let nutrient = item, value = '', unit = '';
+                            if (match) {
+                              nutrient = match[1].trim();
+                              const valParts = match[2].split(' ');
+                              value = valParts[0];
+                              unit = valParts.slice(1).join(' ');
+                            }
+                            return (
+                              <tr key={idx} className="border-t border-yellow-100">
+                                <td className="p-2 font-semibold text-yellow-800">{nutrient}</td>
+                                <td className="p-2 text-yellow-700">{value}</td>
+                                <td className="p-2 text-yellow-700">{unit}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   ) : (
                     <span className="text-green-700 text-sm italic">No excesses detected</span>
                   )}
@@ -409,16 +483,74 @@ const SoilTestAdvisory: React.FC = () => {
             <div className="space-y-6">
               {fields.map((field) => {
                 const needsTest = !field.soilTest || !field.soilTest.recorded_date || monthsAgo(field.soilTest.recorded_date) > 12;
+                // Always define deficiencyAlerts for this field
                 const deficiencyAlerts = getDeficiencyAlerts(field.allAnalytics);
+                // Use latest manual test for indicator, not analytics
+                let indicatorColor = 'bg-green-400 border-green-600';
+                let indicatorTooltip = 'All nutrients within optimal range';
+                if (field.latestManual) {
+                  // Use the same params as summary
+                  const params = [
+                    { key: 'soil_ph', label: 'Soil pH', green: [6, 7.5] },
+                    { key: 'ec', label: 'EC (dS/m)', green: [0.2, 1.0] },
+                    { key: 'nitrogen', label: 'Nitrogen (N)', green: [280, 450] },
+                    { key: 'phosphorus', label: 'Phosphorus (P)', green: [20, 40] },
+                    { key: 'potassium', label: 'Potassium (K)', green: [120, 250] },
+                    { key: 'zn', label: 'Zinc (Zn)', green: [0.6, 1.2] },
+                    { key: 'fe', label: 'Iron (Fe)', green: [4.5, 8] },
+                    { key: 'mn', label: 'Manganese (Mn)', green: [2, 5] },
+                    { key: 'cu', label: 'Copper (Cu)', green: [0.2, 0.5] },
+                    { key: 'b', label: 'Boron (B)', green: [0.5, 1.0] },
+                    { key: 'oc', label: 'Organic Carbon (OC)', green: [0.75, 1.5] },
+                    { key: 's', label: 'Sulphur (S)', green: [10, 20] },
+                    { key: 'lime_requirement', label: 'Lime Requirement', green: [0, 2] },
+                    { key: 'gypsum_requirement', label: 'Gypsum Requirement', green: [0, 2] },
+                  ];
+                  let excessList = [];
+                  let lackingList = [];
+                  for (const param of params) {
+                    const val = field.latestManual[param.key];
+                    if (val === undefined || val === null) continue;
+                    if (val > param.green[1]) excessList.push(param.label);
+                    else if (val < param.green[0]) lackingList.push(param.label);
+                  }
+                  if (excessList.length > 0) {
+                    indicatorColor = 'bg-red-400 border-red-600';
+                    indicatorTooltip = 'Excess: ' + excessList.join(', ');
+                  } else if (lackingList.length > 0) {
+                    indicatorColor = 'bg-yellow-300 border-yellow-500';
+                    indicatorTooltip = 'Lacking: ' + lackingList.join(', ');
+                  }
+                }
                 return (
-                  <Card key={field.id} className="mb-4 p-4">
+                  <Card key={field.id} className="mb-4 p-4 transition-shadow duration-200 hover:shadow-2xl bg-gradient-to-br from-green-50 to-white border-2 border-green-100 rounded-2xl">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2">
-                      <div>
-                        <span className="font-semibold text-lg">{field.name}</span>
+                      <div className="flex items-center gap-3">
+                        {/* Unique status indicator with icon and gradient ring */}
+                        <span
+                          className={`relative flex items-center justify-center w-8 h-8 rounded-full border-4 shadow-md transition-all duration-200 ${indicatorColor} bg-white/80 hover:scale-110`}
+                          style={{
+                            background: indicatorColor.includes('red')
+                              ? 'radial-gradient(circle at 60% 40%, #fff 60%, #f87171 100%)'
+                              : indicatorColor.includes('yellow')
+                              ? 'radial-gradient(circle at 60% 40%, #fff 60%, #fde68a 100%)'
+                              : 'radial-gradient(circle at 60% 40%, #fff 60%, #6ee7b7 100%)',
+                          }}
+                          title={indicatorTooltip}
+                        >
+                          {indicatorColor.includes('red') ? (
+                            <svg className="w-4 h-4 text-red-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728" /></svg>
+                          ) : indicatorColor.includes('yellow') ? (
+                            <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" /></svg>
+                          ) : (
+                            <svg className="w-4 h-4 text-green-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          )}
+                        </span>
+                        <span className="font-extrabold text-lg text-green-900 tracking-tight drop-shadow-sm">{field.name}</span>
                         {needsTest ? (
                           <span className="ml-2 text-red-600 font-medium">No recent soil/water test found.</span>
                         ) : (
-                          <span className="ml-2 text-green-700">Last test: {new Date(field.soilTest.recorded_date).toLocaleDateString()} (pH: {field.soilTest.metric_value})</span>
+                          <span className="ml-2 text-green-700 text-sm font-medium">Last test: {new Date(field.soilTest.recorded_date).toLocaleDateString()} <span className="hidden md:inline">(pH: {field.soilTest.metric_value})</span></span>
                         )}
                       </div>
                       <div className="mt-2 md:mt-0 flex gap-2">
@@ -513,12 +645,17 @@ const SoilTestAdvisory: React.FC = () => {
                     {deficiencyAlerts.length > 0 && (
                       <div className="mt-2">
                         <div className="font-semibold mb-1">Nutrient Deficiency & RAG Alerts:</div>
-                        <ul className="space-y-1">
+                        <ul className="space-y-2">
                           {deficiencyAlerts.map(alert => (
-                            <li key={alert.key} className="flex items-center gap-2">
-                              <span>{alert.label}:</span>
-                              <span className={`px-2 py-0.5 rounded text-xs font-bold ${alert.status === 'green' ? 'bg-green-100 text-green-800' : alert.status === 'amber' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{alert.status.toUpperCase()}</span>
-                              <span className="text-gray-700">({alert.value})</span>
+                            <li key={alert.key} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 p-2 rounded-lg border border-gray-100 bg-gray-50">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">{alert.label}:</span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${alert.status === 'green' ? 'bg-green-100 text-green-800' : alert.status === 'amber' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>{alert.status.toUpperCase()}</span>
+                                <span className="text-gray-700">({alert.value})</span>
+                              </div>
+                              {(alert.status === 'amber' || alert.status === 'red') && alert.advisory && (
+                                <div className={`text-xs md:text-sm ${alert.status === 'red' ? 'text-red-700' : 'text-yellow-700'} font-medium pl-6 md:pl-0`}>Action: {alert.advisory}</div>
+                              )}
                             </li>
                           ))}
                         </ul>
