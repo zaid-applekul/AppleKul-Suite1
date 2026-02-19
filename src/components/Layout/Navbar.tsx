@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Menu, Edit, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { User, Menu, Edit, LogOut, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -73,6 +73,7 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, user }) => {
             <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
 
+
           {isDropdownOpen && (
             <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
               <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-3">
@@ -97,16 +98,6 @@ const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, user }) => {
                 Edit Profile
               </button>
               
-              <button
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  navigate('/profile');
-                }}
-                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Settings className="w-4 h-4 mr-3 text-gray-500" />
-                Settings
-              </button>
               
               <div className="border-t border-gray-200 my-1"></div>
               

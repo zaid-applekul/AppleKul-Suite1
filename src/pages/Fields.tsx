@@ -1399,7 +1399,7 @@ const Fields = () => {
                     {field.location}
                   </div>
                 </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getHealthStatusColor(field.healthStatus)}`}>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getHealthStatusColor(field.healthStatus)}`}> 
                   {field.healthStatus}
                 </span>
               </div>
@@ -1415,6 +1415,66 @@ const Fields = () => {
                   <span className="text-sm text-gray-600">Soil Type:</span>
                   <span className="text-sm font-medium text-gray-900">{field.soilType}</span>
                 </div>
+                {/* Owner */}
+                {field.owner && field.owner !== '' ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Owner:</span>
+                    <span className="text-sm font-medium text-gray-900">{field.owner}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Coordinates:</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {field.latitude && field.longitude ? `${field.latitude.toFixed(5)}, ${field.longitude.toFixed(5)}` : '—'}
+                  </span>
+                </div>
+                {/* Varieties */}
+                {Array.isArray(field.varietyTrees) && field.varietyTrees.length > 0 && field.varietyTrees.some(v => v.variety && v.variety !== '') ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Varieties:</span>
+                    <span className="text-sm font-medium text-gray-900">
+                      {field.varietyTrees.filter(v => v.variety && v.variety !== '').map(v => v.variety).join(', ')}
+                    </span>
+                  </div>
+                ) : null}
+                {/* Total Trees */}
+                {(() => {
+                  const totalTrees = field.totalTrees && field.totalTrees !== ''
+                    ? field.totalTrees
+                    : (Array.isArray(field.varietyTrees) && field.varietyTrees.length > 0
+                      ? field.varietyTrees.reduce((sum, v) => sum + (parseInt(v.totalTrees) || 0), 0)
+                      : null);
+                  return totalTrees && totalTrees !== 0 && totalTrees !== '0' ? (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Trees:</span>
+                      <span className="text-sm font-medium text-gray-900">{totalTrees}</span>
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Total Rows */}
+                {Array.isArray(field.rows) && field.rows.length > 0 ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Rows:</span>
+                    <span className="text-sm font-medium text-gray-900">{field.rows.length}</span>
+                  </div>
+                ) : null}
+
+                {/* Pincode */}
+                {field.pincode && field.pincode !== '' ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Pincode:</span>
+                    <span className="text-sm font-medium text-gray-900">{field.pincode}</span>
+                  </div>
+                ) : null}
+
+                {/* Last Updated */}
+                {field.updated_at && field.updated_at !== '' ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Last Updated:</span>
+                    <span className="text-sm font-medium text-gray-900">{new Date(field.updated_at).toLocaleDateString()}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-6 flex space-x-2">

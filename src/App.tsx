@@ -6,6 +6,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Fields from './pages/Fields';
 import Profile from './pages/Profile';
+import SkuastAdvisory from './pages/SkuastAdvisory';
 import { useAuth } from './contexts/AuthContext';
 
 const RequireAuth = ({ children }: { children: ReactNode }) => {
@@ -44,6 +45,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="fields" element={<Fields />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="skuast-advisory" element={<SkuastAdvisory />} />
         </Route>
       </Routes>
     </Router>
