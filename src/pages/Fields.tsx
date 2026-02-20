@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Plus, Edit, Trash2, Save, X, Upload, TreePine, Ruler, Calendar, MapIcon, Eye } from 'lucide-react';
+import { MapPin, Plus, CreditCard as Edit, Trash2, Save, X, Upload, TreePine, Ruler, Calendar, Map as MapIcon, Eye } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { supabase } from '../lib/supabaseClient';

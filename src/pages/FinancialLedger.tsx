@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit, Trash2, DollarSign, TrendingUp, TrendingDown, Users, Droplets } from 'lucide-react';
+import { Plus, CreditCard as Edit, Trash2, DollarSign, TrendingUp, TrendingDown, Users, Droplets } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useFinancialLedger } from '../hooks/useFinancialLedger';

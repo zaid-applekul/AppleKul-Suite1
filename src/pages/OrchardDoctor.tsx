@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Calendar, Phone, Video, MessageCircle, MapPin, Clock, CheckCircle, AlertTriangle, User, Stethoscope } from 'lucide-react';
+import { Plus, Calendar, Phone, Video, MessageCircle, MapPin, Clock, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, User, Stethoscope } from 'lucide-react';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
 import { useOrchardDoctor } from '../hooks/useOrchardDoctor';
